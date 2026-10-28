@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "one-impact", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "/Users/mo/Downloads/One-Impact", "run", "dev"], "port": 3000 }
+  ]
+}

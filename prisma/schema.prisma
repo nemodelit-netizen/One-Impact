@@ -1,0 +1,125 @@
+// One Impact data model.
+// SQLite for local dev; switch provider to "postgresql" for launch.
+// Enum-like fields are Strings because SQLite has no native enums;
+// allowed values live in src/lib/constants.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  name               String
+  email              String   @unique
+  role               String   @default("MEMBER") // MEMBER | ADMIN
+  verified           Boolean  @default(false) // only verified members may vote
+  monthlyAmountCents Int      @default(1500)
+  createdAt          DateTime @default(now())
+
+  votes       Vote[]
+  ledger      LedgerEntry[]
+  stageEvents StageEvent[]
+}
+
+model Project {
+  id                  String   @id @default(cuid())
+  slug                String   @unique
+  title               String
+  summary             String
+  description         String
+  category            String // WATER | HEALTH | FOOD | SHELTER | EDUCATION | LIVELIHOODS
+  location            String
+  implementingPartner String
+  budgetCents         Int
+  stage               String   @default("IDENTIFIED")
+  risks               String   @default("")
+  isEmergency         Boolean  @default(false)
+  emergencyReason     String? // must be disclosed publicly when isEmergency
+  createdAt           DateTime @default(now())
+
+  roundId String?
+  round   VotingRound? @relation(fields: [roundId], references: [id])
+
+  votes       Vote[]
+  milestones  Milestone[]
+  ledger      LedgerEntry[]
+  stageEvents StageEvent[]
+}
+
+// A voting round: members get one vote per round, cast for one project.
+model VotingRound {
+  id              String    @id @default(cuid())
+  title           String
+  opensAt         DateTime
+  closesAt        DateTime
+  minTurnoutPct   Int       @default(10) // % of verified members required for a valid result
+  closedAt        DateTime?
+  winnerProjectId String?
+  createdAt       DateTime  @default(now())
+
+  projects Project[]
+  votes    Vote[]
+}
+
+model Vote {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  roundId   String
+  createdAt DateTime @default(now())
+
+  user    User        @relation(fields: [userId], references: [id])
+  project Project     @relation(fields: [projectId], references: [id])
+  round   VotingRound @relation(fields: [roundId], references: [id])
+
+  @@unique([userId, roundId])
+}
+
+model Milestone {
+  id          String    @id @default(cuid())
+  projectId   String
+  title       String
+  dueDate     DateTime
+  completedAt DateTime?
+  evidence    String? // description / link to supporting documentation
+  sortOrder   Int       @default(0)
+
+  project Project @relation(fields: [projectId], references: [id])
+}
+
+// Append-only financial ledger. Each entry stores the hash of the previous
+// entry, so any edit or deletion of history breaks the chain and is detectable.
+// Rows are never updated or deleted; corrections are new entries.
+model LedgerEntry {
+  seq         Int      @id @default(autoincrement())
+  type        String // CONTRIBUTION | ALLOCATION | DISBURSEMENT | OPERATING_COST | REFUND
+  amountCents Int
+  memo        String
+  userId      String?
+  projectId   String?
+  createdAt   DateTime @default(now())
+  prevHash    String
+  hash        String   @unique
+
+  user    User?    @relation(fields: [userId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
+}
+
+// History of every lifecycle decision (who moved what, when, and why).
+model StageEvent {
+  id        String   @id @default(cuid())
+  projectId String
+  fromStage String?
+  toStage   String
+  note      String
+  actorId   String?
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+  actor   User?   @relation(fields: [actorId], references: [id])
+}
